@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Python Virtual Environment
+venv/
+flask-service/venv/
+__pycache__/
+*.pyc
+
+# Build folders
+dist/
+build/
+
+# macOS system files
+.DS_Store
