@@ -4,14 +4,19 @@ import { AuthContext } from '../context/AuthContext';
 
 const Login = () => {
     const [isReg, setIsReg] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'student' });
+    // Added studentId to the initial form state
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'student', studentId: '' });
     const { setUser } = useContext(AuthContext);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
             const url = `http://localhost:5001/api/auth/${isReg ? 'register' : 'login'}`;
-            const { data } = await axios.post(url, form);
+            
+            // For login, we don't need to send name or studentId
+            const payload = isReg ? form : { email: form.email, password: form.password };
+            
+            const { data } = await axios.post(url, payload);
             setUser(data);
             localStorage.setItem('userInfo', JSON.stringify(data));
         } catch (err) { 
@@ -30,11 +35,25 @@ const Login = () => {
                         onChange={e => setForm({...form, name: e.target.value})} 
                     />
                 )}
+                
                 <input 
                     type="email" placeholder="Email Address" required
                     style={{ padding: '10px' }}
                     onChange={e => setForm({...form, email: e.target.value})} 
                 />
+
+                {/* --- NEW: Student ID Field --- */}
+                {isReg && form.role === 'student' && (
+                    <input 
+                        type="text" 
+                        placeholder="College Roll Number (e.g. 22CSE045)" 
+                        required
+                        style={{ padding: '10px', border: '2px solid #007bff22' }}
+                        value={form.studentId}
+                        onChange={e => setForm({...form, studentId: e.target.value.toUpperCase()})} 
+                    />
+                )}
+
                 <input 
                     type="password" placeholder="Password" required
                     style={{ padding: '10px' }}
@@ -46,7 +65,8 @@ const Login = () => {
                         <label style={{ fontSize: '14px', color: '#666' }}>Register as:</label>
                         <select 
                             style={{ width: '100%', padding: '10px', marginTop: '5px' }}
-                            onChange={e => setForm({...form, role: e.target.value})}
+                            value={form.role}
+                            onChange={e => setForm({...form, role: e.target.value, studentId: e.target.value === 'faculty' ? '' : form.studentId})}
                         >
                             <option value="student">Student</option>
                             <option value="faculty">Faculty</option>
@@ -54,11 +74,11 @@ const Login = () => {
                     </div>
                 )}
 
-                <button type="submit" style={{ padding: '10px', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+                <button type="submit" style={{ padding: '10px', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
                     {isReg ? 'Sign Up' : 'Login'}
                 </button>
             </form>
-            <p onClick={() => setIsReg(!isReg)} style={{ marginTop: '20px', cursor: 'pointer', color: '#007bff', fontSize: '14px' }}>
+            <p onClick={() => { setIsReg(!isReg); setForm({...form, role: 'student'}); }} style={{ marginTop: '20px', cursor: 'pointer', color: '#007bff', fontSize: '14px' }}>
                 {isReg ? 'Already have an account? Login' : "Don't have an account? Register"}
             </p>
         </div>

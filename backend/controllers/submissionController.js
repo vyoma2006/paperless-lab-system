@@ -54,3 +54,18 @@ exports.getStudentSubmission = async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 };
+
+// Add this to backend/controllers/submissionController.js
+exports.getSubmissionsByLab = async (req, res) => {
+    try {
+        const { labId } = req.params;
+        const submissions = await Submission.find({ labId })
+            .populate('labId')
+            .populate('experimentId')
+            .sort({ createdAt: -1 });
+
+        res.json(submissions);
+    } catch (err) {
+        res.status(500).json({ message: "Error fetching lab submissions", error: err.message });
+    }
+};

@@ -5,8 +5,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import FacultyDashboard from './pages/FacultyDashboard';
 import LabManual from './pages/LabManual';
-import ManageLabs from './pages/ManageLabs'; // New Import
-import ManageManuals from './pages/ManageManuals'; // New Import
+import ManageLabs from './pages/ManageLabs'; 
+import ManageManuals from './pages/ManageManuals'; 
 
 function App() {
     const { user } = useContext(AuthContext);
@@ -17,9 +17,10 @@ function App() {
                 {/* 1. Authentication Check */}
                 <Route path="/" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
 
-                {/* 2. Unified Dashboard Route */}
+                {/* 2. Updated Unified Dashboard Route */}
+                {/* Adding :labId? allows sidebar links like /dashboard/123 to work */}
                 <Route 
-                    path="/dashboard" 
+                    path="/dashboard/:labId?" 
                     element={
                         user ? (
                             user.role === 'faculty' ? <FacultyDashboard /> : <Dashboard />
@@ -35,7 +36,7 @@ function App() {
                     element={user?.role === 'student' ? <LabManual /> : <Navigate to="/" />} 
                 />
 
-                {/* 4. New Faculty Management Routes */}
+                {/* 4. Faculty Management Routes */}
                 <Route 
                     path="/faculty/manage-labs" 
                     element={user?.role === 'faculty' ? <ManageLabs /> : <Navigate to="/" />} 

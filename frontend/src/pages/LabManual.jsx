@@ -16,14 +16,11 @@ const LabManual = () => {
     const [observations, setObservations] = useState('');
     const [loading, setLoading] = useState(true);
 
-    // 1. Fetch Lab and Experiments with Safety Guards
     useEffect(() => {
         const fetchLabDetails = async () => {
             setLoading(true);
             try {
                 const labRes = await axios.get('http://localhost:5001/api/labs');
-                
-                // CRITICAL FIX: Ensure labRes.data is an array before using .find()
                 if (labRes.data && Array.isArray(labRes.data)) {
                     const foundLab = labRes.data.find(l => l._id === id);
                     setLab(foundLab);
@@ -43,7 +40,6 @@ const LabManual = () => {
         if (id) fetchLabDetails();
     }, [id]);
 
-    // 2. Fetch submission whenever experiment or user changes
     useEffect(() => {
         const fetchSubmission = async () => {
             if (!selectedExp || !user?._id) return;
@@ -70,7 +66,8 @@ const LabManual = () => {
             await axios.post('http://localhost:5001/api/submissions', {
                 labId: id,
                 experimentId: selectedExp._id,
-                studentId: user._id,
+                // CRITICAL CHANGE: Use roll number/studentId if available, fallback to _id
+                studentId: user.studentId || user.rollNumber || user._id, 
                 studentName: user.name,
                 observations
             });
@@ -80,94 +77,88 @@ const LabManual = () => {
     };
 
     const downloadPDF = () => {
-    if (!submission || !selectedExp || !lab) return;
+        if (!submission || !selectedExp || !lab) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 20;
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
 
-    // --- 1. Formal University Header ---
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(22, 53, 92); // Dark Navy Blue
-    doc.text("CHARUSAT UNIVERSITY", pageWidth / 2, 25, { align: "center" });
-    
-    doc.setFontSize(12);
-    doc.setTextColor(100);
-    doc.text("FACULTY OF TECHNOLOGY & ENGINEERING", pageWidth / 2, 32, { align: "center" });
-    
-    // Horizontal Line
-    doc.setDrawColor(200);
-    doc.line(margin, 38, pageWidth - margin, 38);
+        // --- 1. Formal University Header ---
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(20);
+        doc.setTextColor(22, 53, 92); 
+        doc.text("CHARUSAT UNIVERSITY", pageWidth / 2, 25, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text("FACULTY OF TECHNOLOGY & ENGINEERING", pageWidth / 2, 32, { align: "center" });
+        doc.setDrawColor(200);
+        doc.line(margin, 38, pageWidth - margin, 38);
 
-    // --- 2. Lab Metadata Table-style Layout ---
-    doc.setFontSize(11);
-    doc.setTextColor(0);
-    doc.setFont("helvetica", "bold");
-    doc.text("Student Name:", margin, 50);
-    doc.text("Student ID:", 120, 50);
-    doc.text("Subject:", margin, 58);
-    doc.text("Date:", 120, 58);
+        // --- 2. Metadata Section (Updated to show Roll Number) ---
+        doc.setFontSize(11);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "bold");
+        doc.text("Student Name:", margin, 50);
+        doc.text("Roll Number:", 120, 50); // Updated Label
+        doc.text("Subject:", margin, 58);
+        doc.text("Date:", 120, 58);
 
-    doc.setFont("helvetica", "normal");
-    doc.text(`${user.name}`, margin + 30, 50);
-    doc.text(`${user._id.substring(0, 8)}...`, 145, 50); // Shortened ID
-    doc.text(`${lab.title}`, margin + 30, 58);
-    doc.text(`${new Date(submission.updatedAt).toLocaleDateString()}`, 145, 58);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${user.name}`, margin + 30, 50);
+        // Show actual roll number from submission or user object
+        doc.text(`${submission.studentId || user.studentId || user.rollNumber}`, 148, 50); 
+        doc.text(`${lab.title}`, margin + 30, 58);
+        doc.text(`${new Date(submission.updatedAt).toLocaleDateString()}`, 135, 58);
 
-    // --- 3. Experiment Title Section ---
-    doc.setFillColor(245, 247, 250); // Light gray background
-    doc.rect(margin, 68, pageWidth - (margin * 2), 12, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.text(`EXPERIMENT: ${selectedExp.title}`, pageWidth / 2, 76, { align: "center" });
+        // --- 3. Experiment Title ---
+        doc.setFillColor(245, 247, 250); 
+        doc.rect(margin, 68, pageWidth - (margin * 2), 12, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        doc.text(`EXPERIMENT: ${selectedExp.title}`, pageWidth / 2, 76, { align: "center" });
 
-    // --- 4. Content Sections ---
-    let currentY = 95;
+        let currentY = 95;
 
-    // Aim Section
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("AIM:", margin, currentY);
-    doc.setFont("helvetica", "normal");
-    const aimLines = doc.splitTextToSize(selectedExp.aim, pageWidth - (margin * 2));
-    doc.text(aimLines, margin, currentY + 7);
-    
-    currentY += (aimLines.length * 7) + 15;
+        // Aim
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("AIM:", margin, currentY);
+        doc.setFont("helvetica", "normal");
+        const aimLines = doc.splitTextToSize(selectedExp.aim, pageWidth - (margin * 2));
+        doc.text(aimLines, margin, currentY + 7);
+        currentY += (aimLines.length * 7) + 15;
 
-    // Observations Section
-    doc.setFont("helvetica", "bold");
-    doc.text("OBSERVATIONS & ANALYSIS:", margin, currentY);
-    doc.line(margin, currentY + 2, margin + 60, currentY + 2); // Underline
-    
-    doc.setFont("courier", "normal"); // Code/Table look for observations
-    doc.setFontSize(10);
-    const obsLines = doc.splitTextToSize(submission.observations, pageWidth - (margin * 2));
-    doc.text(obsLines, margin, currentY + 12);
+        // Observations
+        doc.setFont("helvetica", "bold");
+        doc.text("OBSERVATIONS & ANALYSIS:", margin, currentY);
+        doc.line(margin, currentY + 2, margin + 65, currentY + 2); 
+        doc.setFont("courier", "normal"); 
+        doc.setFontSize(10);
+        const obsLines = doc.splitTextToSize(submission.observations, pageWidth - (margin * 2));
+        doc.text(obsLines, margin, currentY + 12);
 
-    // --- 5. Footer / Certification ---
-    const footerY = 270;
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(10);
-    doc.setTextColor(150);
-    doc.text("Digitally generated via Paperless Lab Record System", margin, footerY);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(0);
-    doc.text("Grade Assigned:", 140, footerY - 10);
-    doc.setFontSize(14);
-    doc.setTextColor(40, 167, 69); // Green
-    doc.text(`${submission.grade}/100`, 175, footerY - 10);
+        // Footer
+        const footerY = 270;
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(150);
+        doc.text("Digitally generated via Paperless Lab Record System", margin, footerY);
+        
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(0);
+        doc.text("Grade:", 140, footerY - 10);
+        doc.setFontSize(14);
+        doc.setTextColor(40, 167, 69); 
+        doc.text(`${submission.grade}/100`, 158, footerY - 10);
 
-    // Final Signature Line
-    doc.setDrawColor(0);
-    doc.line(140, footerY, 190, footerY);
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text("Instructor Signature", 153, footerY + 5);
+        doc.line(140, footerY, 190, footerY);
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text("Authorized Instructor Signature", 145, footerY + 5);
 
-    doc.save(`LabRecord_${selectedExp.title}_${user.name}.pdf`);
-};
+        doc.save(`${user.studentId || 'Lab'}_${selectedExp.title}.pdf`);
+    };
 
     if (loading) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f0f2f5' }}>
@@ -195,7 +186,10 @@ const LabManual = () => {
                 >
                     ← Dashboard
                 </button>
-                <h2 style={{ fontSize: '18px', color: '#63b3ed', marginBottom: '20px' }}>{lab.title}</h2>
+                <h2 style={{ fontSize: '18px', color: '#63b3ed', marginBottom: '10px' }}>{lab.title}</h2>
+                <p style={{ fontSize: '11px', color: '#718096', textTransform: 'uppercase', marginBottom: '20px' }}>
+                    Roll No: {user.studentId || user.rollNumber}
+                </p>
                 <ul style={{ listStyle: 'none', padding: 0 }}>
                     {experiments.map((exp, index) => (
                         <li 
@@ -221,44 +215,44 @@ const LabManual = () => {
                 {selectedExp ? (
                     <div style={{ maxWidth: '900px', margin: 'auto' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h1>{selectedExp.title}</h1>
+                            <h1 style={{ color: '#2d3748' }}>{selectedExp.title}</h1>
                             {submission?.status === 'Approved' && (
-                                <div style={{ background: '#38a169', color: 'white', padding: '8px 15px', borderRadius: '8px', fontWeight: 'bold' }}>
+                                <div style={{ background: '#38a169', color: 'white', padding: '8px 15px', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                                     Grade: {submission.grade}/100
                                 </div>
                             )}
                         </div>
 
-                        {/* Status/Feedback Box */}
                         {submission && (
                             <div style={{ 
                                 padding: '15px', borderRadius: '10px', marginBottom: '25px', 
                                 border: '1px solid',
                                 background: submission.status === 'Approved' ? '#f0fff4' : submission.status === 'Redo' ? '#fff5f5' : '#fffaf0',
+                                borderColor: submission.status === 'Approved' ? '#c6f6d5' : submission.status === 'Redo' ? '#fed7d7' : '#feebc8',
                                 color: submission.status === 'Approved' ? '#22543d' : submission.status === 'Redo' ? '#822727' : '#744210'
                             }}>
                                 <strong>Status: {submission.status}</strong>
-                                {submission.feedback && <p style={{ marginTop: '5px', fontSize: '14px' }}><b>Note:</b> {submission.feedback}</p>}
+                                {submission.feedback && <p style={{ marginTop: '5px', fontSize: '14px' }}><b>Instructor Note:</b> {submission.feedback}</p>}
                             </div>
                         )}
 
                         <div style={{ background: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-                            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Aim</h3>
-                            <p>{selectedExp.aim}</p>
-                            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: '20px' }}>Procedure</h3>
-                            <p style={{ whiteSpace: 'pre-line' }}>{selectedExp.procedure}</p>
+                            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', color: '#4a5568' }}>Aim</h3>
+                            <p style={{ color: '#2d3748', lineHeight: '1.6' }}>{selectedExp.aim}</p>
+                            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: '20px', color: '#4a5568' }}>Procedure</h3>
+                            <p style={{ whiteSpace: 'pre-line', color: '#4a5568', lineHeight: '1.6' }}>{selectedExp.procedure}</p>
                         </div>
 
                         <div style={{ marginTop: '30px' }}>
-                            <h3 style={{ marginBottom: '15px' }}>Your Record</h3>
+                            <h3 style={{ marginBottom: '15px', color: '#2d3748' }}>Lab Observations</h3>
                             {isLocked ? (
-                                <div style={{ padding: '20px', background: '#edf2f7', borderRadius: '12px', border: '1px solid #cbd5e0' }}>
-                                    <p style={{ whiteSpace: 'pre-line' }}>{submission.observations}</p>
-                                    <div style={{ marginTop: '15px', borderTop: '1px solid #cbd5e0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '12px', color: '#718096' }}>Locked - {submission.status}</span>
+                                <div style={{ padding: '25px', background: '#edf2f7', borderRadius: '12px', border: '1px solid #cbd5e0' }}>
+                                    <p style={{ whiteSpace: 'pre-line', color: '#1a202c', fontFamily: 'monospace' }}>{submission.observations}</p>
+                                    <div style={{ marginTop: '20px', borderTop: '1px solid #cbd5e0', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '12px', color: '#718096' }}>Final Record Locked - {new Date(submission.updatedAt).toLocaleDateString()}</span>
                                         {submission.status === 'Approved' && (
-                                            <button onClick={downloadPDF} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>
-                                                Download PDF
+                                            <button onClick={downloadPDF} style={{ background: '#3182ce', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>
+                                                📄 Download Official Record
                                             </button>
                                         )}
                                     </div>
@@ -266,14 +260,16 @@ const LabManual = () => {
                             ) : (
                                 <form onSubmit={handleSubmit}>
                                     <textarea 
-                                        style={{ width: '100%', minHeight: '180px', padding: '15px', borderRadius: '10px', border: '2px solid #e2e8f0', fontSize: '16px' }}
+                                        style={{ width: '100%', minHeight: '200px', padding: '15px', borderRadius: '10px', border: '2px solid #e2e8f0', fontSize: '16px', outline: 'none', transition: 'border 0.2s' }}
+                                        onFocus={(e) => e.target.style.borderColor = '#63b3ed'}
+                                        onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                                         value={observations}
                                         onChange={(e) => setObservations(e.target.value)}
-                                        placeholder="Enter your observations here..."
+                                        placeholder="Enter your observations, calculations, or code snippets here..."
                                         required
                                     />
-                                    <button type="submit" style={{ background: '#38a169', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '8px', marginTop: '15px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                        {submission?.status === 'Redo' ? 'Update & Resubmit' : 'Submit Record'}
+                                    <button type="submit" style={{ background: '#38a169', color: 'white', border: 'none', padding: '14px 30px', borderRadius: '10px', marginTop: '15px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(56, 161, 105, 0.2)' }}>
+                                        {submission?.status === 'Redo' ? '🔄 Resubmit Correction' : '📤 Submit for Review'}
                                     </button>
                                 </form>
                             )}
@@ -281,7 +277,7 @@ const LabManual = () => {
                     </div>
                 ) : (
                     <div style={{ textAlign: 'center', marginTop: '100px', color: '#a0aec0' }}>
-                        <h2>Select an experiment to begin</h2>
+                        <h2>Select an experiment from the sidebar to begin.</h2>
                     </div>
                 )}
             </div>

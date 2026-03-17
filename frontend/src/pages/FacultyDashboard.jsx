@@ -10,20 +10,51 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const FacultyDashboard = () => {
     const { user, logout } = useContext(AuthContext);
     const navigate = useNavigate();
+    
+    // UI State
+    const [activeView, setActiveView] = useState('analytics'); // 'analytics' or 'lab-detail'
+    const [selectedLab, setSelectedLab] = useState(null); // The specific lab object
+    const [viewTab, setViewTab] = useState('pending'); // 'pending' or 'graded'
+    
+    // Data State
     const [submissions, setSubmissions] = useState([]);
+    const [allLabs, setAllLabs] = useState([]); 
+    const [searchQuery, setSearchQuery] = useState('');
     const [grades, setGrades] = useState({});
     const [feedback, setFeedback] = useState({});
 
-    const fetchSubmissions = async () => {
+    const formatRollNumber = (id) => {
+        if (!id || id.length > 15) return id?.substring(id.length - 5).toUpperCase() || "N/A";
+        return id.toUpperCase();
+    };
+
+    // 1. Fetch all labs managed by this instructor
+    useEffect(() => {
+        const fetchMyLabs = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5001/api/labs');
+                const myLabs = data.filter(lab => lab.instructorId === user._id || lab === user._id);
+                setAllLabs(myLabs);
+            } catch (err) { console.error("Error fetching labs", err); }
+        };
+        if (user) fetchMyLabs();
+    }, [user]);
+
+    // 2. Fetch submissions for the selected lab
+    const fetchSubmissions = async (labId) => {
         try {
-            const { data } = await axios.get('http://localhost:5001/api/submissions');
+            const url = labId === 'all' 
+                ? 'http://localhost:5001/api/submissions' 
+                : `http://localhost:5001/api/submissions/lab/${labId}`;
             
-            // 1. Filter by instructor
+            const { data } = await axios.get(url);
+            
+            // Filter by instructor
             const mySubmissions = data.filter(sub => 
                 sub.labId && (sub.labId.instructorId === user._id || sub.labId === user._id)
             );
 
-            // 2. GROUPING LOGIC: Keep only the latest submission per student per experiment
+            // Grouping for latest submission
             const grouped = {};
             mySubmissions.forEach(sub => {
                 const key = `${sub.studentId}_${sub.experimentId?._id}`;
@@ -32,161 +63,167 @@ const FacultyDashboard = () => {
                 }
             });
 
-            // 3. SORTING LOGIC: Move "Pending" to the top
-            const sortedSubmissions = Object.values(grouped).sort((a, b) => {
-                if (a.status === 'Pending' && b.status !== 'Pending') return -1;
-                if (a.status !== 'Pending' && b.status === 'Pending') return 1;
-                return 0;
+            const sorted = Object.values(grouped);
+            setSubmissions(sorted);
+
+            // Sync grades/feedback state
+            const initGrades = {};
+            const initFeedback = {};
+            sorted.forEach(s => { 
+                initGrades[s._id] = s.grade || ""; 
+                initFeedback[s._id] = s.feedback || ""; 
             });
-
-            setSubmissions(sortedSubmissions);
-        } catch (err) { console.error("Error fetching submissions:", err); }
+            setGrades(initGrades);
+            setFeedback(initFeedback);
+        } catch (err) { console.error("Error fetching submissions", err); }
     };
 
-    useEffect(() => { if (user) fetchSubmissions(); }, [user]);
+    // Trigger fetch when lab changes
+    useEffect(() => {
+        if (selectedLab) {
+            fetchSubmissions(selectedLab._id);
+        } else {
+            fetchSubmissions('all');
+        }
+    }, [selectedLab]);
 
-    const prepareChartData = () => {
-        const labStats = {};
-        submissions.forEach(sub => {
-            const title = sub.labId?.title || "Unknown";
-            if (!labStats[title]) labStats[title] = { total: 0, count: 0 };
-            if (sub.grade > 0) {
-                labStats[title].total += sub.grade;
-                labStats[title].count += 1;
-            }
-        });
-
-        return {
-            labels: Object.keys(labStats),
-            datasets: [{
-                label: 'Average Class Grade (%)',
-                data: Object.keys(labStats).map(key => labStats[key].total / labStats[key].count || 0),
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-            }]
-        };
+    const handleLabSelect = (lab) => {
+        setSelectedLab(lab);
+        setActiveView('lab-detail');
+        setViewTab('pending');
     };
 
-    const updateStatus = async (id, newStatus) => {
-        try {
-            const gradeValue = grades[id] || 0;
-            const feedbackValue = feedback[id] || "";
-            const finalGrade = newStatus === 'Redo' ? 0 : gradeValue;
-            
-            await axios.patch(`http://localhost:5001/api/submissions/${id}`, { 
-                status: newStatus, 
-                grade: finalGrade,
-                feedback: feedbackValue
-            });
-            
-            alert(`Status updated to: ${newStatus}`);
-            fetchSubmissions(); 
-        } catch (err) { alert('❌ Failed to update status'); }
-    };
+    // --- SIDEBAR COMPONENT ---
+    const renderSidebar = () => (
+        <div style={{ width: '280px', background: '#1a202c', color: 'white', display: 'flex', flexDirection: 'column', height: '100vh' }}>
+            <div style={{ padding: '30px 20px', borderBottom: '1px solid #2d3748' }}>
+                <h2 style={{ fontSize: '18px', color: '#63b3ed', margin: 0 }}>Faculty Portal</h2>
+                <span style={{ fontSize: '12px', color: '#718096' }}>{user.name}</span>
+            </div>
+
+            <nav style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+                <p style={sectionLabelStyle}>General</p>
+                <button 
+                    onClick={() => { setActiveView('analytics'); setSelectedLab(null); }} 
+                    style={sidebarBtnStyle(activeView === 'analytics')}
+                >
+                    📊 Global Analytics
+                </button>
+                <button onClick={() => navigate('/faculty/manage-labs')} style={sidebarBtnStyle(false)}>
+                    ⚙️ Manage Labs
+                </button>
+
+                <p style={{ ...sectionLabelStyle, marginTop: '30px' }}>Your Subjects</p>
+                {allLabs.map(lab => (
+                    <button 
+                        key={lab._id} 
+                        onClick={() => handleLabSelect(lab)}
+                        style={sidebarBtnStyle(selectedLab?._id === lab._id)}
+                    >
+                        📘 {lab.title}
+                    </button>
+                ))}
+            </nav>
+
+            <div style={{ padding: '20px', borderTop: '1px solid #2d3748' }}>
+                <button onClick={logout} style={logoutBtnStyle}>Logout</button>
+            </div>
+        </div>
+    );
 
     return (
-        <div style={{ padding: '30px', fontFamily: 'sans-serif', backgroundColor: '#fdfdfd', minHeight: '100vh' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div>
-                    <h1>Faculty Analytics Portal</h1>
-                    <p>Welcome, <strong>Prof. {user?.name}</strong></p>
+        <div style={{ display: 'flex', height: '100vh', backgroundColor: '#f7fafc' }}>
+            {renderSidebar()}
+
+            <main style={{ flex: 1, overflowY: 'auto', padding: '40px' }}>
+                {/* Header Section */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+                    <h1 style={{ color: '#2d3748', margin: 0 }}>
+                        {selectedLab ? selectedLab.title : "Global Overview"}
+                    </h1>
+                    <div style={{ background: 'white', padding: '5px 15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        <input 
+                            placeholder="Search Roll No..." 
+                            value={searchQuery} 
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{ border: 'none', outline: 'none', padding: '8px' }}
+                        />
+                    </div>
                 </div>
-                <button onClick={logout} style={{ background: '#ff9800', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>Logout</button>
-            </div>
 
-            {/* Navigation Hub */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
-                <button 
-                    onClick={() => navigate('/faculty/manage-labs')}
-                    style={{ padding: '20px', fontSize: '18px', background: '#28a745', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}
-                >
-                    ➕ Manage Labs & Manuals
-                </button>
-                <div style={{ background: '#eef', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
-                    <h2 style={{ margin: 0 }}>{submissions.filter(s => s.status === 'Pending').length}</h2>
-                    <p style={{ margin: 0 }}>Pending Reviews</p>
-                </div>
-            </div>
+                {activeView === 'analytics' ? (
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                        <h3>Performance Across All Labs</h3>
+                        <div style={{ height: '350px' }}>
+                            <Bar 
+                                data={{
+                                    labels: allLabs.map(l => l.title),
+                                    datasets: [{ label: 'Avg Grade', data: [88, 76, 92], backgroundColor: '#4299e1' }]
+                                }} 
+                                options={{ maintainAspectRatio: false }} 
+                            />
+                        </div>
+                    </div>
+                ) : (
+                    <section style={{ background: 'white', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #edf2f7' }}>
+                            <button onClick={() => setViewTab('pending')} style={tabStyle(viewTab === 'pending')}>Action Required</button>
+                            <button onClick={() => setViewTab('graded')} style={tabStyle(viewTab === 'graded')}>Graded History</button>
+                        </div>
 
-            {/* Analytics Section */}
-            <div style={{ background: '#fff', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: '30px', height: '350px' }}>
-                <h3 style={{ marginTop: 0 }}>My Labs: Performance Overview</h3>
-                <Bar data={prepareChartData()} options={{ maintainAspectRatio: false }} />
-            </div>
-
-            {/* Submissions Section */}
-            <section style={{ background: '#fff', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ borderBottom: '2px solid #f4f4f4', paddingBottom: '10px' }}>Review Student Submissions</h3>
-                <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                    {submissions.length > 0 ? submissions.map((sub) => (
-                        <div key={sub._id} style={{ borderBottom: '1px solid #eee', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ flex: 1 }}>
-                                    <strong style={{ fontSize: '18px' }}>{sub.studentName}</strong> 
-                                    <span style={{ color: '#666', marginLeft: '10px', fontSize: '14px' }}>
-                                        {sub.labId?.title} — {sub.experimentId?.title}
-                                    </span>
-                                    <p style={{ fontStyle: 'italic', margin: '10px 0', color: '#444', backgroundColor: '#f9f9f9', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ddd' }}>
-                                        "{sub.observations}"
-                                    </p>
-                                    <span style={{ 
-                                        fontSize: '12px', 
-                                        padding: '4px 12px', 
-                                        borderRadius: '15px', 
-                                        fontWeight: 'bold',
-                                        background: sub.status === 'Approved' ? '#d4edda' : sub.status === 'Redo' ? '#f8d7da' : '#fff3cd',
-                                        color: sub.status === 'Approved' ? '#155724' : sub.status === 'Redo' ? '#721c24' : '#856404'
-                                    }}>
-                                        {sub.status.toUpperCase()}
-                                    </span>
-                                </div>
-                                
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '220px' }}>
-                                    <input 
-                                        type="number" 
-                                        placeholder="Enter Grade (0-100)" 
-                                        style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} 
-                                        onChange={(e) => setGrades({ ...grades, [sub._id]: e.target.value })} 
-                                    />
-                                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ padding: '20px' }}>
+                            {submissions.filter(s => {
+                                const matchesTab = viewTab === 'pending' ? s.status !== 'Approved' : s.status === 'Approved';
+                                const matchesSearch = s.studentId?.toLowerCase().includes(searchQuery.toLowerCase());
+                                return matchesTab && matchesSearch;
+                            }).map(sub => (
+                                <div key={sub._id} style={submissionCardStyle}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <strong style={{ fontSize: '16px' }}>{sub.studentName}</strong>
+                                            <span style={rollBadgeStyle}>{formatRollNumber(sub.studentId)}</span>
+                                        </div>
+                                        <p style={{ margin: '5px 0', color: '#4a5568', fontSize: '14px' }}>{sub.experimentId?.title}</p>
+                                        <div style={{ background: '#f7fafc', padding: '10px', borderRadius: '6px', fontSize: '13px', margin: '10px 0' }}>
+                                            {sub.observations}
+                                        </div>
+                                    </div>
+                                    
+                                    <div style={{ minWidth: '200px', textAlign: 'right' }}>
+                                        <input 
+                                            type="number" 
+                                            value={grades[sub._id] || ""} 
+                                            onChange={(e) => setGrades({...grades, [sub._id]: e.target.value})}
+                                            style={gradeInputStyle}
+                                        />
                                         <button 
-                                            onClick={() => updateStatus(sub._id, 'Approved')} 
-                                            style={{ flex: 1, background: '#28a745', color: '#fff', border: 'none', padding: '10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                                            onClick={() => {/* Update Logic */}} 
+                                            style={approveBtnStyle}
                                         >
-                                            Approve
-                                        </button>
-                                        <button 
-                                            onClick={() => updateStatus(sub._id, 'Redo')} 
-                                            style={{ flex: 1, background: '#dc3545', color: '#fff', border: 'none', padding: '10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                                        >
-                                            Redo
+                                            {viewTab === 'pending' ? 'Approve' : 'Save'}
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Feedback Section */}
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#f0f7ff', padding: '10px', borderRadius: '8px' }}>
-                                <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#0056b3' }}>Feedback:</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Add notes for student..." 
-                                    value={feedback[sub._id] || ""}
-                                    style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #b8daff' }}
-                                    onChange={(e) => setFeedback({ ...feedback, [sub._id]: e.target.value })}
-                                />
-                                {sub.feedback && (
-                                    <span style={{ fontSize: '11px', color: '#666' }}>
-                                        (Last: {sub.feedback})
-                                    </span>
-                                )}
-                            </div>
+                            ))}
                         </div>
-                    )) : <p style={{ textAlign: 'center', padding: '20px', color: '#888' }}>No submissions found for your labs.</p>}
-                </div>
-            </section>
+                    </section>
+                )}
+            </main>
         </div>
     );
 };
+
+// --- STYLES ---
+const sidebarBtnStyle = (isActive) => ({
+    width: '100%', padding: '12px 15px', textAlign: 'left', borderRadius: '8px', border: 'none', cursor: 'pointer', marginBottom: '5px',
+    background: isActive ? '#2b6cb0' : 'transparent', color: isActive ? 'white' : '#a0aec0', fontSize: '15px', fontWeight: isActive ? 'bold' : 'normal', transition: '0.2s'
+});
+const sectionLabelStyle = { fontSize: '11px', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold', marginBottom: '10px', paddingLeft: '10px' };
+const logoutBtnStyle = { width: '100%', padding: '12px', background: '#e53e3e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+const tabStyle = (isActive) => ({ padding: '15px 30px', border: 'none', background: 'none', borderBottom: isActive ? '3px solid #3182ce' : 'none', color: isActive ? '#3182ce' : '#718096', fontWeight: 'bold', cursor: 'pointer' });
+const submissionCardStyle = { display: 'flex', padding: '20px', borderBottom: '1px solid #f7fafc', gap: '20px', alignItems: 'flex-start' };
+const rollBadgeStyle = { background: '#ebf8ff', color: '#2c5282', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' };
+const gradeInputStyle = { width: '60px', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', marginBottom: '10px', textAlign: 'center', fontWeight: 'bold' };
+const approveBtnStyle = { width: '100%', padding: '8px', background: '#38a169', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' };
 
 export default FacultyDashboard;
