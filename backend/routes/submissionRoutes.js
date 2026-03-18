@@ -6,7 +6,8 @@ const {
     getSubmissions, 
     updateStatus, 
     getStudentSubmission,
-    getSubmissionsByLab 
+    getSubmissionsByLab,
+    getStudentAllSubmissions // <--- 1. Add this to your imports
 } = require('../controllers/submissionController');
 
 router.post('/', submitLab);
@@ -16,7 +17,11 @@ router.patch('/:id', updateStatus);
 // New filtered route
 router.get('/lab/:labId', getSubmissionsByLab);
 
-// This route must match the 3-parameter structure used in your frontend useEffect
+// --- 2. ADD THIS SPECIFIC ROUTE ---
+// This matches the frontend call: /api/submissions/student/${user._id}
+router.get('/student/:studentId', getStudentAllSubmissions);
+
+// This route matches the 3-parameter structure for specific experiments
 router.get('/:labId/:studentId/:experimentId', getStudentSubmission);
 
 module.exports = router;

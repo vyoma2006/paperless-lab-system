@@ -1,188 +1,228 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import LabCard from '../components/LabCard';
 
 const Dashboard = () => {
     const { user, logout } = useContext(AuthContext);
+    const navigate = useNavigate();
+    const [view, setView] = useState('dashboard');
     const [enrolledLabs, setEnrolledLabs] = useState([]);
+    const [submissions, setSubmissions] = useState([]); 
     const [labCode, setLabCode] = useState('');
+    
+    // NEW: Search state for Analytics/Performance
+    const [perfSearch, setPerfSearch] = useState('');
 
-    const fetchEnrolledLabs = async () => {
+    const fetchData = async () => {
         try {
-            const { data } = await axios.get(`http://localhost:5001/api/auth/me/${user._id}`);
-            setEnrolledLabs(data.enrolledLabs || []);
+            const userRes = await axios.get(`http://localhost:5001/api/auth/me/${user._id}`);
+            setEnrolledLabs(userRes.data.enrolledLabs || []);
+
+            const subRes = await axios.get(`http://localhost:5001/api/submissions/student/${user._id}`);
+            setSubmissions(subRes.data || []);
         } catch (err) {
-            console.error("Error fetching enrolled labs", err);
+            console.error("Error fetching dashboard data", err);
         }
     };
 
     useEffect(() => {
-        if (user?._id) fetchEnrolledLabs();
+        if (user?._id) fetchData();
     }, [user]);
+
+    // Reset search when switching views
+    useEffect(() => {
+        setPerfSearch('');
+    }, [view]);
+
+    // --- ANALYTICS CALCULATIONS ---
+    const gradedSubmissions = submissions.filter(s => s.status === 'Approved' || s.grade > 0);
+    
+    const avgGrade = gradedSubmissions.length > 0 
+        ? (gradedSubmissions.reduce((acc, curr) => acc + curr.grade, 0) / gradedSubmissions.length).toFixed(1) 
+        : '--';
+        
+    const pendingTasks = submissions.filter(s => s.status === 'Pending' || s.status === 'Redo').length;
+
+    // Filtered submissions for the Analytics table
+    const filteredPerf = gradedSubmissions.filter(sub => 
+        sub.experimentId?.title?.toLowerCase().includes(perfSearch.toLowerCase()) ||
+        sub.labId?.title?.toLowerCase().includes(perfSearch.toLowerCase())
+    );
 
     const handleJoinLab = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('http://localhost:5001/api/labs/join', {
-                labCode: labCode,
-                studentId: user._id
-            });
-            alert('✅ Successfully joined the lab!');
+            await axios.post('http://localhost:5001/api/labs/join', { labCode, studentId: user._id });
+            alert('✅ Successfully joined!');
             setLabCode('');
-            fetchEnrolledLabs();
-        } catch (err) {
-            alert('❌ ' + (err.response?.data?.message || 'Failed to join lab'));
-        }
+            fetchData();
+            setView('labs');
+        } catch (err) { alert('❌ ' + (err.response?.data?.message || 'Failed')); }
     };
 
     return (
-        <div className="dashboard-container">
-            {/* INJECTED STYLES FOR PREMIUM LOOK */}
-            <style>{`
-                .dashboard-container { min-height: 100vh; background: linear-gradient(135deg,#eef2ff,#f8fafc); font-family: "Segoe UI", sans-serif; color: #1f2937; }
-                header { background: linear-gradient(90deg,#1e3a8a,#2563eb,#3b82f6); color: #fff; padding: 18px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-                .layout { display: flex; min-height: calc(100vh - 72px); }
-                .sidebar { width: 240px; background: #ffffffee; backdrop-filter: blur(6px); padding: 22px; border-right: 1px solid #e5e7eb; }
-                .sidebar h3 { font-size: 14px; color: #2563eb; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1px; }
-                .sidebar a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #374151; padding: 12px 14px; border-radius: 10px; margin-bottom: 8px; transition: 0.3s; cursor: pointer; }
-                .sidebar a:hover, .sidebar a.active { background: linear-gradient(90deg,#dbeafe,#eff6ff); color: #1e3a8a; font-weight: 600; }
-                .main { flex: 1; padding: 30px; }
-                .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-bottom: 34px; }
-                .stat { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); position: relative; overflow: hidden; }
-                .stat::after { content: ""; position: absolute; right: -30px; top: -30px; width: 80px; height: 80px; border-radius: 50%; background: rgba(37,99,235,0.15); }
-                .stat h3 { font-size: 30px; color: #2563eb; margin: 0; }
-                .stat p { margin-top: 6px; font-size: 14px; color: #6b7280; }
-                .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
-                .box { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
-                .join-form { display: flex; gap: 10px; margin-bottom: 20px; }
-                .join-input { flex: 1; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; outline: none; transition: 0.3s; }
-                .join-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-                .btn-primary { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
-                .btn-primary:hover { background: #1e3a8a; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                th, td { padding: 14px; font-size: 14px; text-align: left; border-bottom: 1px solid #f1f5f9; }
-                th { background: #eff6ff; color: #1e3a8a; font-weight: 600; }
-                .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-                .status-active { background: #dcfce7; color: #166534; }
-                ul { list-style: none; padding: 0; }
-                ul li { padding: 12px; background: #f1f5f9; border-radius: 10px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #3b82f6; }
-                @media(max-width: 1000px){ .stats { grid-template-columns: repeat(2,1fr); } .grid { grid-template-columns: 1fr; } .sidebar { display:none; } }
-            `}</style>
-
-            <header>
-                <h1>PLRMS</h1>
-                <div style={{ textAlign: 'right' }}>
-                    <span style={{ display: 'block', fontSize: '14px', opacity: 0.9 }}>Welcome, {user?.name}</span>
-                    <span style={{ fontSize: '12px', fontWeight: 'bold' }}>Smart Student Dashboard</span>
+        <div style={containerStyle}>
+            <header style={headerStyle}>
+                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>PLRMS <span style={{ fontWeight: 300, fontSize: '14px', marginLeft: '10px', opacity: 0.8 }}>| Student Portal</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <span style={{ fontSize: '14px' }}>{user?.name} ({user?.studentId})</span>
+                    <button onClick={logout} style={logoutBtnStyle}>Logout</button>
                 </div>
             </header>
 
-            <div className="layout">
-                <nav className="sidebar">
-                    <h3>Navigation</h3>
-                    <a className="active">📊 Dashboard</a>
-                    <a>📁 My Labs</a>
-                    <a>📤 Submissions</a>
-                    <a>📝 Feedback</a>
-                    <a>⚙️ Settings</a>
-                    <a onClick={logout} style={{ color: '#dc2626' }}>🚪 Logout</a>
+            <div style={layoutStyle}>
+                <nav style={sidebarStyle}>
+                    <div style={sectionLabel}>MENU</div>
+                    <div style={view === 'dashboard' ? activeNavStyle : navItemStyle} onClick={() => setView('dashboard')}>📊 Dashboard</div>
+                    <div style={view === 'labs' ? activeNavStyle : navItemStyle} onClick={() => setView('labs')}>📁 My Labs</div>
+                    <div style={view === 'analytics' ? activeNavStyle : navItemStyle} onClick={() => setView('analytics')}>📈 Performance</div>
+                    <div style={view === 'feedback' ? activeNavStyle : navItemStyle} onClick={() => setView('feedback')}>💬 Feedback</div>
                 </nav>
 
-                <main className="main">
-                    <h2>Dashboard Overview</h2>
-
-                    {/* DYNAMIC STATS CARDS */}
-                    <div className="stats">
-                        <div className="stat">
-                            <h3>{enrolledLabs.length}</h3>
-                            <p>📁 Enrolled Labs</p>
-                        </div>
-                        <div className="stat">
-                            <h3>0</h3>
-                            <p>📤 Submitted</p>
-                        </div>
-                        <div className="stat">
-                            <h3>0</h3>
-                            <p>⏳ Pending Review</p>
-                        </div>
-                        <div className="stat">
-                            <h3>--</h3>
-                            <p>🎓 Overall Grade</p>
-                        </div>
-                    </div>
-
-                    <div className="grid">
-                        <div className="left-column">
-                            {/* JOIN LAB BOX */}
-                            <div className="box" style={{ marginBottom: '24px' }}>
-                                <h3>Join a New Lab</h3>
-                                <form onSubmit={handleJoinLab} className="join-form">
-                                    <input 
-                                        type="text" 
-                                        className="join-input"
-                                        placeholder="Enter Lab Code (e.g. CE252)" 
-                                        value={labCode}
-                                        onChange={(e) => setLabCode(e.target.value)}
-                                        required
-                                    />
-                                    <button type="submit" className="btn-primary">Join Lab</button>
-                                </form>
+                <main style={mainContentStyle}>
+                    {view === 'dashboard' && (
+                        <>
+                            <h2 style={{ marginBottom: '25px', color: '#1e293b' }}>Overview</h2>
+                            <div style={statsGrid}>
+                                <div style={statCard}><h3>{enrolledLabs.length}</h3><p>Active Labs</p></div>
+                                <div style={statCard}><h3>{pendingTasks}</h3><p>Pending Tasks</p></div>
+                                <div style={{ ...statCard, borderLeft: '5px solid #10b981' }}><h3>{avgGrade}</h3><p>Avg Grade (%)</p></div>
                             </div>
+                            <h3 style={{ color: '#1e293b', marginBottom: '15px' }}>Recently Accessed</h3>
+                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                {enrolledLabs.slice(0, 3).map(lab => (
+                                    <LabCard key={lab._id} id={lab._id} labName={lab.title} labCode={lab.code} instructor={lab.instructor} />
+                                ))}
+                            </div>
+                        </>
+                    )}
 
-                            {/* LABS TABLE */}
-                            <div className="box">
-                                <h3>Your Registered Labs</h3>
-                                <table>
+                    {view === 'analytics' && (
+                        <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+                                <h2 style={{ color: '#1e293b', margin: 0 }}>Academic Performance</h2>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search Experiment or Lab..." 
+                                    value={perfSearch}
+                                    onChange={(e) => setPerfSearch(e.target.value)}
+                                    style={searchInputStyle} 
+                                />
+                            </div>
+                            <div style={cardStyle}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead>
-                                        <tr>
-                                            <th>Lab Name</th>
-                                            <th>Code</th>
-                                            <th>Instructor</th>
+                                        <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9', color: '#64748b' }}>
+                                            <th style={{ padding: '12px' }}>Experiment</th>
+                                            <th>Lab</th>
+                                            <th>Grade</th>
                                             <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {enrolledLabs.length > 0 ? (
-                                            enrolledLabs.map(lab => (
-                                                <tr key={lab._id}>
-                                                    <td style={{ fontWeight: '600' }}>{lab.title}</td>
-                                                    <td>{lab.code}</td>
-                                                    <td>{lab.instructor || 'Not Assigned'}</td>
-                                                    <td><span className="badge status-active">Enrolled</span></td>
+                                        {filteredPerf.length > 0 ? (
+                                            filteredPerf.map(sub => (
+                                                <tr key={sub._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '15px 12px', fontWeight: 600 }}>{sub.experimentId?.title || "Untitled Exp"}</td>
+                                                    <td style={{ color: '#64748b' }}>{sub.labId?.title}</td>
+                                                    <td style={{ color: '#2563eb', fontWeight: 'bold' }}>{sub.grade}/100</td>
+                                                    <td>
+                                                        <span style={{ 
+                                                            background: sub.status === 'Approved' ? '#dcfce7' : '#fee2e2', 
+                                                            color: sub.status === 'Approved' ? '#166534' : '#991b1b', 
+                                                            padding: '4px 10px', 
+                                                            borderRadius: '20px', 
+                                                            fontSize: '12px',
+                                                            fontWeight: 'bold'
+                                                        }}>
+                                                            {sub.status}
+                                                        </span>
+                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
-                                            <tr>
-                                                <td colSpan="4" style={{ textAlign: 'center', color: '#888', padding: '30px' }}>
-                                                    No labs joined yet. Use the form above to get started!
-                                                </td>
-                                            </tr>
+                                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                                                {perfSearch ? `No results for "${perfSearch}"` : "No graded experiments found."}
+                                            </td></tr>
                                         )}
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
+                        </>
+                    )}
 
-                        <div className="right-column">
-                            <div className="box">
-                                <h3>Notifications</h3>
-                                <ul>
-                                    <li>🚀 Welcome to PLRMS Dashboard!</li>
-                                    <li>🧪 Browse your labs in the left panel.</li>
-                                    <li>📢 New lab materials uploaded for DBMS.</li>
-                                    <li>⏰ Upcoming deadline for OS Lab.</li>
-                                </ul>
+                    {view === 'feedback' && (
+                        <>
+                            <h2 style={{ marginBottom: '25px', color: '#1e293b' }}>Faculty Feedback</h2>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                {submissions.filter(s => s.feedback).length > 0 ? (
+                                    submissions.filter(s => s.feedback).map(sub => (
+                                        <div key={sub._id} style={feedbackCardStyle}>
+                                            <div style={feedbackHeader}>
+                                                <div>
+                                                    <h4 style={{ margin: 0, color: '#1e293b' }}>{sub.labId?.title}</h4>
+                                                    <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{sub.experimentId?.title}</p>
+                                                </div>
+                                                <div style={gradeBadgeStyle}>{sub.grade}/100</div>
+                                            </div>
+                                            <div style={feedbackBody}>
+                                                <p style={{ margin: 0, color: '#475569', lineHeight: '1.5' }}>"{sub.feedback}"</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div style={cardStyle}>
+                                        <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>No feedback available yet.</p>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    </div>
+                        </>
+                    )}
 
-                    <footer style={{ textAlign: 'center', marginTop: '40px', color: '#94a3b8', fontSize: '13px' }}>
-                        © 2026 Paperless Lab Record Management System
-                    </footer>
+                    {view === 'labs' && (
+                        <>
+                            <h2 style={{ marginBottom: '25px' }}>My Enrolled Labs</h2>
+                            <div style={{ ...cardStyle, background: '#f8fafc' }}>
+                                <h3 style={{ marginTop: 0, fontSize: '16px' }}>Join a New Course</h3>
+                                <form onSubmit={handleJoinLab} style={{ display: 'flex', gap: '10px' }}>
+                                    <input type="text" placeholder="Enter Lab Code" value={labCode} onChange={(e) => setLabCode(e.target.value)} style={inputStyle} required />
+                                    <button type="submit" style={joinBtnStyle}>Join Lab</button>
+                                </form>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                                {enrolledLabs.map(lab => (
+                                    <LabCard key={lab._id} id={lab._id} labName={lab.title} labCode={lab.code} instructor={lab.instructor} />
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </main>
             </div>
         </div>
     );
 };
+
+// --- STYLES ---
+const containerStyle = { display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' };
+const headerStyle = { height: '60px', background: '#1e3a8a', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 30px', zIndex: 100 };
+const layoutStyle = { display: 'flex', flex: 1, overflow: 'hidden' };
+const sidebarStyle = { width: '260px', background: '#0f172a', color: '#9ca3af', padding: '30px 15px', display: 'flex', flexDirection: 'column' };
+const mainContentStyle = { flex: 1, padding: '40px', overflowY: 'auto', background: '#f1f5f9' };
+const navItemStyle = { padding: '12px 15px', borderRadius: '8px', cursor: 'pointer', transition: '0.2s', marginBottom: '5px', fontSize: '15px' };
+const activeNavStyle = { ...navItemStyle, background: '#2563eb', color: 'white', fontWeight: 'bold' };
+const sectionLabel = { fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '10px', paddingLeft: '10px', letterSpacing: '1px' };
+const statsGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' };
+const statCard = { background: 'white', padding: '22px', borderRadius: '12px', borderLeft: '5px solid #2563eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' };
+const cardStyle = { background: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '30px' };
+const inputStyle = { flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e0', outline: 'none' };
+const searchInputStyle = { padding: '10px 15px', borderRadius: '8px', border: '1px solid #cbd5e0', width: '250px', fontSize: '14px', outline: 'none' };
+const joinBtnStyle = { background: '#2563eb', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' };
+const logoutBtnStyle = { background: '#ef4444', color: 'white', border: 'none', padding: '6px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' };
+const feedbackCardStyle = { background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' };
+const feedbackHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' };
+const feedbackBody = { background: '#f8fafc', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #cbd5e0' };
+const gradeBadgeStyle = { background: '#eff6ff', color: '#2563eb', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
 
 export default Dashboard;

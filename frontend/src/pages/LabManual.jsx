@@ -108,7 +108,7 @@ const LabManual = () => {
 
         doc.setFont("helvetica", "normal");
         doc.text(`${user.name}`, margin + 30, 50);
-        doc.text(`${submission.studentId || user.studentId || user.rollNumber}`, 148, 50); 
+        doc.text(`${user.studentId || user.rollNumber || "N/A"}`, 148, 50); 
         doc.text(`${lab.title}`, margin + 30, 58);
         doc.text(`${new Date(submission.updatedAt).toLocaleDateString()}`, 135, 58);
 

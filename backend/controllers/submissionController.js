@@ -65,3 +65,20 @@ exports.getSubmissionsByLab = async (req, res) => {
         res.status(500).json({ message: "Error fetching lab submissions", error: err.message });
     }
 };
+
+// Add this function to your submissionController.js
+exports.getStudentAllSubmissions = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        
+        // We find all submissions for this student
+        // .populate is what fetches the Lab and Experiment NAMES instead of just IDs
+        const submissions = await Submission.find({ studentId })
+            .populate('labId', 'title instructor') 
+            .populate('experimentId', 'title aim');
+
+        res.status(200).json(submissions);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching student performance data", error });
+    }
+};
