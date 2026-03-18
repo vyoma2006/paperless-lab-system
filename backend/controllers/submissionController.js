@@ -2,11 +2,10 @@ const Submission = require('../models/Submission');
 
 exports.submitLab = async (req, res) => {
     try {
-        // 1. Added experimentId to the request body destructuring
         const { labId, experimentId, studentId, studentName, observations } = req.body;
         const newSubmission = await Submission.create({
             labId,
-            experimentId, // Saving the specific experiment reference
+            experimentId,
             studentId,
             studentName,
             observations
@@ -19,7 +18,6 @@ exports.submitLab = async (req, res) => {
 
 exports.getSubmissions = async (req, res) => {
     try {
-        // We MUST populate labId to access the instructorId for filtering
         const submissions = await Submission.find()
             .populate('labId') 
             .populate('experimentId'); 
@@ -32,7 +30,7 @@ exports.getSubmissions = async (req, res) => {
 exports.updateStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, grade, feedback } = req.body; // Catch feedback here
+        const { status, grade, feedback } = req.body;
         const updatedSubmission = await Submission.findByIdAndUpdate(
             id, 
             { status, grade, feedback }, 
@@ -46,7 +44,6 @@ exports.updateStatus = async (req, res) => {
 
 exports.getStudentSubmission = async (req, res) => {
     try {
-        // 3. Updated to check for a specific experiment submission
         const { labId, studentId, experimentId } = req.params;
         const submission = await Submission.findOne({ labId, studentId, experimentId });
         res.json(submission);
@@ -55,7 +52,6 @@ exports.getStudentSubmission = async (req, res) => {
     }
 };
 
-// Add this to backend/controllers/submissionController.js
 exports.getSubmissionsByLab = async (req, res) => {
     try {
         const { labId } = req.params;

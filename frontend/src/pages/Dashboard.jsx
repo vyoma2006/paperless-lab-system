@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import LabCard from '../components/LabCard';
 
 const Dashboard = () => {
-    // 1. Destructure logout from AuthContext
-    const { user, logout } = useContext(AuthContext); 
+    const { user, logout } = useContext(AuthContext);
     const [enrolledLabs, setEnrolledLabs] = useState([]);
     const [labCode, setLabCode] = useState('');
 
@@ -38,84 +36,150 @@ const Dashboard = () => {
     };
 
     return (
-        <div style={{ padding: '30px', fontFamily: 'Arial', backgroundColor: '#fdfdfd', minHeight: '100vh' }}>
-            
-            {/* 2. HEADER SECTION WITH LOGOUT */}
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                marginBottom: '30px',
-                borderBottom: '2px solid #eee',
-                paddingBottom: '15px'
-            }}>
-                <div>
-                    <h1 style={{ margin: 0, color: '#333' }}>Student Dashboard</h1>
-                    <p style={{ margin: 0, color: '#666' }}>Welcome, <strong>{user?.name}</strong></p>
+        <div className="dashboard-container">
+            {/* INJECTED STYLES FOR PREMIUM LOOK */}
+            <style>{`
+                .dashboard-container { min-height: 100vh; background: linear-gradient(135deg,#eef2ff,#f8fafc); font-family: "Segoe UI", sans-serif; color: #1f2937; }
+                header { background: linear-gradient(90deg,#1e3a8a,#2563eb,#3b82f6); color: #fff; padding: 18px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+                .layout { display: flex; min-height: calc(100vh - 72px); }
+                .sidebar { width: 240px; background: #ffffffee; backdrop-filter: blur(6px); padding: 22px; border-right: 1px solid #e5e7eb; }
+                .sidebar h3 { font-size: 14px; color: #2563eb; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1px; }
+                .sidebar a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #374151; padding: 12px 14px; border-radius: 10px; margin-bottom: 8px; transition: 0.3s; cursor: pointer; }
+                .sidebar a:hover, .sidebar a.active { background: linear-gradient(90deg,#dbeafe,#eff6ff); color: #1e3a8a; font-weight: 600; }
+                .main { flex: 1; padding: 30px; }
+                .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-bottom: 34px; }
+                .stat { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); position: relative; overflow: hidden; }
+                .stat::after { content: ""; position: absolute; right: -30px; top: -30px; width: 80px; height: 80px; border-radius: 50%; background: rgba(37,99,235,0.15); }
+                .stat h3 { font-size: 30px; color: #2563eb; margin: 0; }
+                .stat p { margin-top: 6px; font-size: 14px; color: #6b7280; }
+                .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+                .box { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
+                .join-form { display: flex; gap: 10px; margin-bottom: 20px; }
+                .join-input { flex: 1; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; outline: none; transition: 0.3s; }
+                .join-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+                .btn-primary { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+                .btn-primary:hover { background: #1e3a8a; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { padding: 14px; font-size: 14px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+                th { background: #eff6ff; color: #1e3a8a; font-weight: 600; }
+                .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+                .status-active { background: #dcfce7; color: #166534; }
+                ul { list-style: none; padding: 0; }
+                ul li { padding: 12px; background: #f1f5f9; border-radius: 10px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #3b82f6; }
+                @media(max-width: 1000px){ .stats { grid-template-columns: repeat(2,1fr); } .grid { grid-template-columns: 1fr; } .sidebar { display:none; } }
+            `}</style>
+
+            <header>
+                <h1>PLRMS</h1>
+                <div style={{ textAlign: 'right' }}>
+                    <span style={{ display: 'block', fontSize: '14px', opacity: 0.9 }}>Welcome, {user?.name}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 'bold' }}>Smart Student Dashboard</span>
                 </div>
-                <button 
-                    onClick={logout} 
-                    style={{ 
-                        background: '#ff9800', 
-                        color: 'white', 
-                        border: 'none', 
-                        padding: '10px 20px', 
-                        borderRadius: '5px', 
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    Logout
-                </button>
-            </div>
+            </header>
 
-            {/* JOIN LAB SECTION */}
-            <section style={{ 
-                background: '#f0f7ff', 
-                padding: '20px', 
-                borderRadius: '10px', 
-                marginBottom: '30px',
-                border: '1px solid #cce5ff' 
-            }}>
-                <h3>Join a New Lab</h3>
-                <form onSubmit={handleJoinLab} style={{ display: 'flex', gap: '10px' }}>
-                    <input 
-                        type="text" 
-                        placeholder="Enter Lab Code (e.g. CE252)" 
-                        value={labCode}
-                        onChange={(e) => setLabCode(e.target.value)}
-                        style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '250px' }}
-                        required
-                    />
-                    <button type="submit" style={{ 
-                        background: '#007bff', 
-                        color: 'white', 
-                        border: 'none', 
-                        padding: '10px 20px', 
-                        borderRadius: '5px', 
-                        cursor: 'pointer' 
-                    }}>
-                        Join Lab
-                    </button>
-                </form>
-            </section>
+            <div className="layout">
+                <nav className="sidebar">
+                    <h3>Navigation</h3>
+                    <a className="active">📊 Dashboard</a>
+                    <a>📁 My Labs</a>
+                    <a>📤 Submissions</a>
+                    <a>📝 Feedback</a>
+                    <a>⚙️ Settings</a>
+                    <a onClick={logout} style={{ color: '#dc2626' }}>🚪 Logout</a>
+                </nav>
 
-            {/* LIST OF LABS */}
-            <h3>Your Enrolled Labs</h3>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                {enrolledLabs.length > 0 ? (
-                    enrolledLabs.map(lab => (
-                        <LabCard 
-                            key={lab._id} 
-                            id={lab._id} 
-                            labName={lab.title} 
-                            labCode={lab.code} 
-                            instructor={lab.instructor} 
-                        />
-                    ))
-                ) : (
-                    <p style={{ color: '#888' }}>You haven't joined any labs yet. Enter a code above to start!</p>
-                )}
+                <main className="main">
+                    <h2>Dashboard Overview</h2>
+
+                    {/* DYNAMIC STATS CARDS */}
+                    <div className="stats">
+                        <div className="stat">
+                            <h3>{enrolledLabs.length}</h3>
+                            <p>📁 Enrolled Labs</p>
+                        </div>
+                        <div className="stat">
+                            <h3>0</h3>
+                            <p>📤 Submitted</p>
+                        </div>
+                        <div className="stat">
+                            <h3>0</h3>
+                            <p>⏳ Pending Review</p>
+                        </div>
+                        <div className="stat">
+                            <h3>--</h3>
+                            <p>🎓 Overall Grade</p>
+                        </div>
+                    </div>
+
+                    <div className="grid">
+                        <div className="left-column">
+                            {/* JOIN LAB BOX */}
+                            <div className="box" style={{ marginBottom: '24px' }}>
+                                <h3>Join a New Lab</h3>
+                                <form onSubmit={handleJoinLab} className="join-form">
+                                    <input 
+                                        type="text" 
+                                        className="join-input"
+                                        placeholder="Enter Lab Code (e.g. CE252)" 
+                                        value={labCode}
+                                        onChange={(e) => setLabCode(e.target.value)}
+                                        required
+                                    />
+                                    <button type="submit" className="btn-primary">Join Lab</button>
+                                </form>
+                            </div>
+
+                            {/* LABS TABLE */}
+                            <div className="box">
+                                <h3>Your Registered Labs</h3>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Lab Name</th>
+                                            <th>Code</th>
+                                            <th>Instructor</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {enrolledLabs.length > 0 ? (
+                                            enrolledLabs.map(lab => (
+                                                <tr key={lab._id}>
+                                                    <td style={{ fontWeight: '600' }}>{lab.title}</td>
+                                                    <td>{lab.code}</td>
+                                                    <td>{lab.instructor || 'Not Assigned'}</td>
+                                                    <td><span className="badge status-active">Enrolled</span></td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan="4" style={{ textAlign: 'center', color: '#888', padding: '30px' }}>
+                                                    No labs joined yet. Use the form above to get started!
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="right-column">
+                            <div className="box">
+                                <h3>Notifications</h3>
+                                <ul>
+                                    <li>🚀 Welcome to PLRMS Dashboard!</li>
+                                    <li>🧪 Browse your labs in the left panel.</li>
+                                    <li>📢 New lab materials uploaded for DBMS.</li>
+                                    <li>⏰ Upcoming deadline for OS Lab.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <footer style={{ textAlign: 'center', marginTop: '40px', color: '#94a3b8', fontSize: '13px' }}>
+                        © 2026 Paperless Lab Record Management System
+                    </footer>
+                </main>
             </div>
         </div>
     );

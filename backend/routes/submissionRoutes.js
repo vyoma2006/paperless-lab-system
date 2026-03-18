@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
+const express = require("express");
+const router = express.Router(); 
+
 const { 
     submitLab, 
     getSubmissions, 
     updateStatus, 
     getStudentSubmission,
-    getSubmissionsByLab // <--- Add this import!
+    getSubmissionsByLab 
 } = require('../controllers/submissionController');
 
 router.post('/', submitLab);
