@@ -69,13 +69,15 @@ const LabManual = () => {
             await axios.post('http://localhost:5001/api/submissions', {
                 labId: id,
                 experimentId: selectedExp._id,
-                studentId: user.studentId || user.rollNumber || user._id, 
+                studentId: user._id,
                 studentName: user.name,
                 observations
             });
             alert('✅ Submission successful!');
             window.location.reload();
-        } catch (err) { alert('❌ Submission failed'); }
+        } catch (err) {
+            console.error("Error submitting lab report", err);
+            alert('❌ Submission failed'); }
     };
 
     const downloadPDF = () => {

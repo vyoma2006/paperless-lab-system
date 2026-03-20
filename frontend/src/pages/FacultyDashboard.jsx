@@ -79,6 +79,32 @@ const FacultyDashboard = () => {
         } catch (err) { console.error("Error fetching submissions", err); }
     };
 
+    const handleApprove = async (subId) => {
+    try {
+        // validation
+        if (!grades[subId]) {
+            alert("⚠️ Please enter grade first");
+            return;
+        }
+
+        await axios.patch(`http://localhost:5001/api/submissions/${subId}`, {
+            status: 'Approved',
+            grade: grades[subId],
+            feedback: feedback[subId]
+        });
+
+        alert("✅ Submission Approved");
+
+        // Refresh data
+        if (selectedLab) fetchSubmissions(selectedLab._id);
+        else fetchSubmissions('all');
+
+    } catch (err) {
+        console.error(err);
+        alert("❌ Failed to update submission");
+    }
+};
+
     useEffect(() => {
         if (selectedLab) fetchSubmissions(selectedLab._id);
         else fetchSubmissions('all');
@@ -326,7 +352,7 @@ const FacultyDashboard = () => {
                                                         style={styles.gradeInput}
                                                     />
                                                     <button 
-                                                        onClick={() => {/* Update Logic */}} 
+                                                       onClick={() => handleApprove(sub._id)}
                                                         style={styles.approveBtn}
                                                     >
                                                         {viewTab === 'pending' ? 'Approve' : 'Save'}
